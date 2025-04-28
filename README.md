@@ -18,6 +18,20 @@ A comprehensive full-stack paper trading platform allowing users to simulate sto
 - Data Processing: Real-time market data ingestion and processing pipeline
 - Business Logic: Robust implementation of trading mechanics and order execution
 
+### Cloud
+#### Azure Databricks:
+- Processes large historical stock datasets and writes them into Delta format tables.
+
+#### Azure Data Lake Storage (ADLS):
+- Serves as the primary cloud storage for processed market data.
+
+#### Azure Key Vault:
+- Securely stores sensitive information like storage account keys and client secrets.
+
+#### Azure Data Factory (ADF):
+- Schedules and automates daily ingestion pipelines by triggering Databricks notebooks.
+
+
 ## Prerequisites
 - Node.js ≥ 16.0.0
 - Python ≥ 3.10.0
@@ -65,14 +79,72 @@ cd python
 pip install -r requirements.txt
 ```
 
-Create a `secrets.env` file in the python directory:
+- **Make sure to store important keys in Azure Key Vault Secrets and make them accessible** 
+
+Set Spark Config
+```
+spark.conf.set("fs.azure.account.key.<Storage Account>.dfs.core.windows.net", secret.value)
+```
+
+Create a `secrets.env` file in the python directory to retrieve data from ADLS:
 ```
 AZURE_CLIENT_ID="YOUR_CLIENT_ID"
 AZURE_TENANT_ID="YOUR_TENANT_ID"
 AZURE_CLIENT_SECRET="YOUR_CLIENT_SECRET"
 ```
 
-*Note: If using Anaconda, place the following JAR files in `/opt/anaconda3/envs/trading/jars`:*
+- **Make sure you have data available in Azure Blob Storage in detla table (parquet) format.** 
+
+Accessing Data
+```
+df = spark.read.format("delta").load("abfss://<Blob Container>@<Storage Account>.dfs.core.windows.net/<path/to/delta/table>")
+
+example:
+df = spark.read.format("delta").load("abfss://data@pprtradingstorage.dfs.core.windows.net/clean/stocks_data/")
+```
+
+
+### 4. Cloud Infrastructure Setup
+
+To fully enable the backend functionality, follow these steps to configure the cloud environment:
+
+---
+
+#### Create Azure Data Lake Storage (ADLS) Account
+
+- Set up a **Storage Account** with **hierarchical namespace enabled** (to use Data Lake Gen2 features).
+- Create a **Blob Container** (e.g., `data`) where Delta tables will be stored.
+
+---
+
+#### Create Azure Key Vault
+
+- Add secrets for:
+  - `SAS-TOKEN`
+  - `STORAGE-KEY`
+- Grant **access policies** to allow Databricks and applications to retrieve secrets securely.
+
+---
+
+#### Deploy Azure Databricks Workspace
+
+- Create a **Databricks workspace**.
+- Configure your workspace to access your Key Vault via a **Databricks Secret Scope**.
+- Install required libraries in Databricks (e.g., `delta-core`, `azure-storage`).
+- Upload or create Databricks Notebooks to process and append data into Delta tables.
+
+---
+
+#### Configure Azure Data Factory (ADF)
+
+- Create an **ADF pipeline** that triggers Databricks notebooks **daily at 12:00 AM**.
+- Set up **Linked Services** for Databricks and ADLS.
+- Monitor pipeline executions through the **ADF Monitoring dashboard**.
+
+---
+
+
+*Note: If using Anaconda or running locally, place the following JAR files in `/opt/anaconda3/envs/trading/jars` or `C:\Spark\spark-3.5.5-bin-hadoop3\jars`:*
 - hadoop-azure-datalake-3.3.1.jar
 - hadoop-azure-3.3.1.jar
 
@@ -140,7 +212,7 @@ python/
 ```
 
 ## Known Limitations
-- Limited to specific stock symbols (currently supports top 10 US stocks)
+- Limited to specific stock symbols (currently supports top 14 US stocks)
 - Uses simulated market data in development environment
 - Supports basic order types only (market orders)
 - No options or derivatives trading
